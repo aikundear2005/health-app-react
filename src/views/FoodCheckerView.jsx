@@ -1,8 +1,8 @@
 // src/views/FoodCheckerView.jsx
 
 import React, { useState, useEffect } from 'react';
+// ... (其他 import 維持不變)
 import { AutoComplete, Card, Tabs, Tag, Typography, Alert, Spin } from 'antd';
-import { SafetyOutlined, ExperimentOutlined, WarningOutlined } from '@ant-design/icons';
 import InteractionCard from '../components/shared/InteractionCard';
 import EmptyState from '../components/food-checker/EmptyState';
 import SearchSection from '../components/food-checker/SearchSection';
@@ -10,18 +10,20 @@ import ResultCard from '../components/food-checker/ResultCard';
 import './FoodCheckerView.css';
 
 const { Title, Paragraph } = Typography;
+const BACKEND_URL = 'https://proactive-health-backend.onrender.com'; // 定義後端網址
 
 function FoodCheckerView() {
     const [allDrugs, setAllDrugs] = useState([]);
     const [selectedDrug, setSelectedDrug] = useState(null);
-    const [isLoading, setIsLoading] = useState(true); // 初始設為 true 以載入藥物列表
-    const [isSearching, setIsSearching] = useState(false); // 用於查詢單一藥物時的載入狀態
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSearching, setIsSearching] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
         const fetchDrugList = async () => {
             try {
-                const response = await fetch('/api/list/drugs');
+                // --- 使用絕對路徑 ---
+                const response = await fetch(`${BACKEND_URL}/api/list/drugs`);
                 if (!response.ok) throw new Error('無法獲取藥物列表');
                 const data = await response.json();
                 setAllDrugs(data);
@@ -34,6 +36,7 @@ function FoodCheckerView() {
         fetchDrugList();
     }, []);
 
+    // ... (其餘 handleSelectDrug 等函數維持不變)
     const handleSelectDrug = (drugName) => {
         setIsSearching(true);
         const drug = allDrugs.find(d => d.name === drugName);
@@ -44,7 +47,6 @@ function FoodCheckerView() {
         }, 500);
     };
 
-    // --- 修正：將 Spin 組件改為 fullscreen 模式 ---
     if (isLoading) {
         return <Spin fullscreen tip="正在初始化查詢器..." />;
     }

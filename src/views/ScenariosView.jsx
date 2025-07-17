@@ -1,16 +1,38 @@
 // src/views/ScenariosView.jsx
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Row, Col, Typography } from 'antd';
+import { Card, Row, Col, Typography, Spin, Alert } from 'antd';
 import './ScenariosView.css'; // <-- 將 CSS import 移到所有 import 語句的末尾
 
 const { Title, Paragraph } = Typography;
 const { Meta } = Card;
 
-function ScenariosView({ database }) {
-  // 從 database 中獲取 scenarios，如果不存在則使用空對象
-  const scenarios = database?.scenarios || {};
+const BACKEND_URL = 'https://proactive-health-backend.onrender.com';
+
+function ScenariosView() {
+  const [scenarios, setScenarios] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchScenarios = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/list/scenarios`);
+        if (!response.ok) throw new Error('無法獲取情境列表');
+        const data = await response.json();
+        setScenarios(Object.values(data)); // 將物件轉換為陣列以便 .map
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchScenarios();
+  }, []);
+
+  if (isLoading) return <Spin fullscreen tip="載入情境中..." />;
+  if (error) return <Alert message="錯誤" description={error} type="error" showIcon />;
 
   return (
     <div className="scenarios-view-container">
@@ -21,9 +43,10 @@ function ScenariosView({ database }) {
         您是否正面臨以下情況？點擊卡片，探索更貼近您生活的整合性建議。
       </Paragraph>
       <Row gutter={[24, 24]}>
-        {Object.entries(scenarios).map(([id, scenario]) => (
-          <Col xs={24} sm={12} md={8} key={id}>
-            <Link to={`/scenarios/${id}`}>
+        {scenarios.map((scenario) => (
+          <Col xs={24} sm={12} md={8} key={scenario.name}>
+            {/* 修正: 將 scenario.name 轉換為 URL-friendly 的 ID */}
+            <Link to={`/scenarios/${encodeURIComponent(scenario.name)}`}>
               <Card
                 hoverable
                 className="scenario-card"
