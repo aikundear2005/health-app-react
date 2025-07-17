@@ -77,7 +77,16 @@ function SearchView({ database }) {
 
   // 當使用者從建議列表中選擇一項時
   const onSelect = (value) => {
-    navigate(`/results/${activeTab}/${encodeURIComponent(value)}`);
+    navigate(`/results/${activeTab}/${encodeURIComponent(value)}`, {
+      state: { originalValue: value }
+    });
+  };
+
+  // 處理熱門查詢點擊
+  const handleHotSearchClick = (term) => {
+    navigate(`/results/${activeTab}/${encodeURIComponent(term)}`, {
+      state: { originalValue: term }
+    });
   };
 
   const handleTabChange = (key) => {
@@ -113,7 +122,7 @@ function SearchView({ database }) {
             {(hotSearches[activeTab] || []).map(term => (
                 <Tag 
                     key={term} 
-                    onClick={() => navigate(`/results/${activeTab}/${encodeURIComponent(term)}`)}
+                    onClick={() => handleHotSearchClick(term)}
                     className="hot-search-tag"
                 >
                     {term}
