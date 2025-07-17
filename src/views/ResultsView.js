@@ -1,7 +1,7 @@
 // src/views/ResultsView.js
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button, Card, Typography, Spin, Alert } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import DrugDetailCard from '../components/details/DrugDetailCard';
@@ -18,9 +18,22 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
 function ResultsView() {
   const { type, itemKey } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [itemData, setItemData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // 從 state 獲取原始值，或解碼 URL 參數
+  const originalTerm = location.state?.originalValue || decodeURIComponent(itemKey);
+
+  // API 端點映射
+  const apiEndpoints = {
+    drug: 'drug',
+    symptom: 'symptom',
+    nutrient: 'nutrient',
+    naturalPrescription: 'natural-prescription',
+    lifestyleImpact: 'lifestyle-impact',
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -29,17 +42,66 @@ function ResultsView() {
         setIsLoading(false);
         return;
       }
+      
       setIsLoading(true);
       setError('');
+      
       try {
-        const response = await fetch(`${API_BASE_URL}/api/${type}/${itemKey}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `找不到資料 (狀態碼: ${response.status})`);
+        console.log(`正在查詢 ${type}: ${originalTerm}`);
+        
+        const endpoint = apiEndpoints[type];
+        if (!endpoint) {
+          throw new Error(`不支援的資料類型: ${type}`);
         }
-        const data = await response.json();
-        setItemData(data);
+
+        // 方法 1: 使用 POST 請求避免 URL 編碼問題
+        let response;
+        let data;
+        
+        try {
+          response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: originalTerm })
+          });
+          
+          if (response.ok) {
+            data = await response.json();
+            setItemData(data);
+            return;
+          }
+        } catch (postError) {
+          console.log('POST 請求失敗，嘗試 GET 請求:', postError.message);
+        }
+
+        // 方法 2: 如果 POST 失敗，嘗試 GET 請求
+        try {
+          // 使用雙重編碼來確保中文字符正確傳遞
+          const encodedTerm = encodeURIComponent(originalTerm);
+          response = await fetch(`${API_BASE_URL}/api/${endpoint}/${encodedTerm}`);
+          
+          if (response.ok) {
+            data = await response.json();
+            setItemData(data);
+            return;
+          }
+        } catch (getError) {
+          console.log('GET 請求也失敗:', getError.message);
+        }
+
+        // 如果兩種方法都失敗，拋出錯誤
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error(`找不到「${originalTerm}」相關資料`);
+          }
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `API 請求失敗 (狀態碼: ${response.status})`);
+        }
+
       } catch (err) {
+        console.error('資料獲取失敗:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -47,19 +109,35 @@ function ResultsView() {
     };
 
     fetchData();
-  }, [type, itemKey]);
+  }, [type, itemKey, originalTerm]);
 
   if (isLoading) {
-    return <Spin fullscreen tip="正在獲取詳細資料..." />;
+    return (
+      <div style={{ width: '100%', textAlign: 'center', marginTop: '100px' }}>
+        <Spin size="large" />
+        <div style={{ marginTop: '16px' }}>
+          正在獲取「{originalTerm}」的詳細資料...
+        </div>
+      </div>
+    );
   }
 
   const renderDetailCard = () => {
     if (error || !itemData) {
       return (
         <Card>
-          <Paragraph style={{ textAlign: 'center', color: 'red' }}>
-             資料載入失敗：{error || `找不到對應的資料：「${itemKey ? decodeURIComponent(itemKey) : "未知項目"}」。`}
-          </Paragraph>
+          <Alert
+            message="資料載入失敗"
+            description={error || `找不到對應的資料：「${originalTerm}」。`}
+            type="error"
+            showIcon
+            style={{ marginBottom: '16px' }}
+          />
+          <div style={{ textAlign: 'center' }}>
+            <Button onClick={() => navigate('/search')}>
+              返回搜尋頁面
+            </Button>
+          </div>
         </Card>
       );
     }
@@ -74,11 +152,23 @@ function ResultsView() {
 
     return componentMapping[type] || (
       <Card>
-        <Paragraph style={{ textAlign: 'center', color: 'red' }}>
-          未知的資料類型：「{type}」。
-        </Paragraph>
+        <Alert
+          message="未知的資料類型"
+          description={`不支援的資料類型：「${type}」。`}
+          type="warning"
+          showIcon
+        />
       </Card>
     );
+  };
+
+  // 分類標籤映射
+  const typeLabels = {
+    drug: '藥物',
+    symptom: '症狀',
+    nutrient: '營養素',
+    naturalPrescription: '自然處方',
+    lifestyleImpact: '生活習慣',
   };
 
   return (
@@ -94,85 +184,18 @@ function ResultsView() {
         <Button onClick={() => navigate('/')}>
           返回首頁
         </Button>
+        <Button onClick={() => navigate('/search')}>
+          重新搜尋
+        </Button>
       </div>
-      <Title level={2}>查詢結果</Title>
+      
+      <Title level={2}>
+        {typeLabels[type] || '查詢'}結果：{originalTerm}
+      </Title>
+      
       {renderDetailCard()}
     </div>
   );
 }
 
 export default ResultsView;
-
-// ==================================================================
-// src/views/ScenariosView.jsx
-
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, Row, Col, Typography, Spin, Alert } from 'antd';
-import './ScenariosView.css';
-
-const { Title, Paragraph } = Typography;
-const { Meta } = Card;
-
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://proactive-health-backend.onrender.com' 
-  : '';
-
-function ScenariosView() {
-  const [scenarios, setScenarios] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const fetchScenarios = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/list/scenarios`);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || '無法獲取情境列表');
-        }
-        const data = await response.json();
-        setScenarios(Object.values(data));
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchScenarios();
-  }, []);
-
-  if (isLoading) return <Spin fullscreen tip="載入情境中..." />;
-  if (error) return <Alert message="錯誤" description={error} type="error" showIcon />;
-
-  return (
-    <div className="scenarios-view-container">
-      <Title level={2} style={{ textAlign: 'center', marginBottom: '24px' }}>
-        常見情境與對應建議
-      </Title>
-      <Paragraph style={{ textAlign: 'center', marginBottom: '40px', fontSize: '16px' }}>
-        您是否正面臨以下情況？點擊卡片，探索更貼近您生活的整合性建議。
-      </Paragraph>
-      <Row gutter={[24, 24]}>
-        {scenarios.map((scenario) => (
-          <Col xs={24} sm={12} md={8} key={scenario.name}>
-            <Link to={`/scenarios/${encodeURIComponent(scenario.name)}`}>
-              <Card
-                hoverable
-                className="scenario-card"
-              >
-                <Meta
-                  avatar={<span className="scenario-icon">{scenario.icon}</span>}
-                  title={<Title level={4}>{scenario.name}</Title>}
-                  description={<Paragraph ellipsis={{ rows: 3 }}>{scenario.description}</Paragraph>}
-                />
-              </Card>
-            </Link>
-          </Col>
-        ))}
-      </Row>
-    </div>
-  );
-}
-
-export default ScenariosView;
